@@ -2,12 +2,15 @@ package tokenizer
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
-type Tokenizer struct{}
+type Tokenizer struct {
+	Ngrams NGramCollection
+}
 
 type Token struct {
 	Id    int64
@@ -22,10 +25,20 @@ var maxNgramId int64 = 10240000
 type NGramCollection struct {
 	WeightedNgrams map[int64]int64
 	NgramLookup    map[string]int64
+	NgramIdLookup  map[int64]string
 }
 
-func (t Tokenizer) Ngramize(s string, min, max int) NGramCollection {
-	ngrams := NGramCollection{}
+func NewTokenizer() Tokenizer {
+	return Tokenizer{
+		Ngrams: NGramCollection{
+			WeightedNgrams: map[int64]int64{},
+			NgramLookup:    map[string]int64{},
+			NgramIdLookup:  map[int64]string{},
+		},
+	}
+}
+
+func (t Tokenizer) Ngramize(s string, min, max int) {
 	tokens := t.Tokenize(s)
 
 	for i := 0; i < len(tokens); i++ {
@@ -37,18 +50,18 @@ func (t Tokenizer) Ngramize(s string, min, max int) NGramCollection {
 				}
 				ngramVal := ngram.String()
 
-				if ngramId, ok := ngrams.NgramLookup[ngramVal]; ok {
-					ngrams.WeightedNgrams[ngramId] = ngrams.WeightedNgrams[ngramId] + 1
+				if ngramId, ok := t.Ngrams.NgramLookup[ngramVal]; ok {
+					t.Ngrams.WeightedNgrams[ngramId] = t.Ngrams.WeightedNgrams[ngramId] + 1
 				} else {
 					ngramId := maxNgramId
 					maxNgramId++
-					ngrams.NgramLookup[ngramVal] = ngramId
-					ngrams.WeightedNgrams[ngramId] = 1
+					t.Ngrams.NgramLookup[ngramVal] = ngramId
+					t.Ngrams.NgramIdLookup[ngramId] = ngramVal
+					t.Ngrams.WeightedNgrams[ngramId] = 1
 				}
 			}
 		}
 	}
-	return ngrams
 }
 
 func (t Tokenizer) Tokenize(s string) []Token {
@@ -62,13 +75,10 @@ func (t Tokenizer) Tokenize(s string) []Token {
 	}
 
 	fixPunct := func(r rune) bool {
-		if unicode.IsPunct(r) {
-			return true
-		}
-		return false
+		return unicode.IsPunct(r)
 	}
 
-	items := regexp.MustCompile("[\\s]+").Split(s, -1)
+	items := regexp.MustCompile(`[\s]+`).Split(s, -1)
 	for _, item := range items {
 		item = strings.Map(fixUtf, item)
 		item = strings.TrimSpace(strings.TrimFunc(item, fixPunct))
@@ -113,4 +123,13 @@ func (t Tokenizer) tokens2Ids(tokens []Token) []int64 {
 		ids = append(ids, token.Id)
 	}
 	return ids
+}
+
+func (t Tokenizer) SortNgrams() []int64 {
+	keys := make([]int64, 0, len(t.Ngrams.WeightedNgrams))
+	for key := range t.Ngrams.WeightedNgrams {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return t.Ngrams.WeightedNgrams[keys[i]] > t.Ngrams.WeightedNgrams[keys[j]] })
+	return keys
 }

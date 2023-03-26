@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -22,7 +23,7 @@ func TestTokenize(t *testing.T) {
 		} else if error != nil {
 			log.Fatal(error)
 		}
-		tk.Ngramize(line[1], 1, 3)
+		tk.Ngramize(strings.ToLower(line[1]), 1, 6)
 	}
 
 	ngramIds := tk.SortNgrams()

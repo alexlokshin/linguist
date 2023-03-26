@@ -1,6 +1,9 @@
 package tokenizer
 
 import (
+	"bufio"
+	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -19,6 +22,7 @@ type Token struct {
 
 var tokenDictionary map[int64]Token = map[int64]Token{}
 var tokenLookupDictionary map[string]Token = map[string]Token{}
+var stopWords map[string]bool = map[string]bool{}
 var maxTokenId int64 = 128
 var maxNgramId int64 = 10240000
 
@@ -39,6 +43,21 @@ func NewTokenizer() Tokenizer {
 }
 
 func (t Tokenizer) Ngramize(s string, min, max int) {
+	readFile, err := os.Open("stopwords.txt")
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	fileScanner := bufio.NewScanner(readFile)
+
+	fileScanner.Split(bufio.ScanLines)
+
+	for fileScanner.Scan() {
+		stopWords[fileScanner.Text()] = true
+	}
+
+	readFile.Close()
+
 	tokens := t.Tokenize(s)
 
 	for i := 0; i < len(tokens); i++ {
@@ -49,15 +68,19 @@ func (t Tokenizer) Ngramize(s string, min, max int) {
 					Tokens: t.tokens2Ids(terms),
 				}
 				ngramVal := ngram.String()
-
+				if _, ok := stopWords[ngramVal]; ok {
+					continue
+				}
+				var ngramLength int64 = int64(j - i + 1)
+				ngramWeight := int64(ngramLength ^ 3)
 				if ngramId, ok := t.Ngrams.NgramLookup[ngramVal]; ok {
-					t.Ngrams.WeightedNgrams[ngramId] = t.Ngrams.WeightedNgrams[ngramId] + 1
+					t.Ngrams.WeightedNgrams[ngramId] = t.Ngrams.WeightedNgrams[ngramId] + ngramWeight
 				} else {
 					ngramId := maxNgramId
 					maxNgramId++
 					t.Ngrams.NgramLookup[ngramVal] = ngramId
 					t.Ngrams.NgramIdLookup[ngramId] = ngramVal
-					t.Ngrams.WeightedNgrams[ngramId] = 1
+					t.Ngrams.WeightedNgrams[ngramId] = ngramWeight
 				}
 			}
 		}
@@ -78,7 +101,7 @@ func (t Tokenizer) Tokenize(s string) []Token {
 		return unicode.IsPunct(r)
 	}
 
-	items := regexp.MustCompile(`[\s]+`).Split(s, -1)
+	items := regexp.MustCompile(`[\s\+]+`).Split(s, -1)
 	for _, item := range items {
 		item = strings.Map(fixUtf, item)
 		item = strings.TrimSpace(strings.TrimFunc(item, fixPunct))
